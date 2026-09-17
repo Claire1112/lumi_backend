@@ -1,0 +1,31 @@
+# ==============================
+# Lumi LangChain Backend
+# ==============================
+
+# FastAPI 後端
+fastapi
+uvicorn[standard]
+
+# 環境變數（讀取 .env）
+python-dotenv
+
+# LangChain
+langchain
+langchain-core
+langchain-google-genai
+
+# Gemini API
+google-genai
+
+# HTTP 請求
+requests
+httpx
+
+# 資料格式與驗證
+pydantic
+
+langchain
+langchain-google-genai
+langchain-chroma
+langchain-text-splitters
+chromadb
