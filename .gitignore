@@ -13,3 +13,7 @@ env/
 serviceAccountKey.json
 firebase-service-account.json
 "@ | Set-Content -Encoding utf8 ".\lumi-langchain\.gitignore"
+# RAG generated files
+rag_indexes/
+rag_backups/
+*.bak

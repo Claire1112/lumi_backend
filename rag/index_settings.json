@@ -1,0 +1,7 @@
+{
+  "directory": "rag_indexes/20260917T111108Z_da04ff9d",
+  "embedding_model": "models/gemini-embedding-001",
+  "collection_name": "lumi_knowledge",
+  "record_count": 83,
+  "chunk_count": 83
+}
