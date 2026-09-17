@@ -112,8 +112,13 @@ def detect_explicit_route_switch(message: str):
 # =====================================================
 # Lumi Chat API
 # =====================================================
-@app.get("/lumi/")
-
+# @app.get("/lumi/")
+@app.get("/")
+def health_check():
+    return {
+        "status": "ok",
+        "service": "Lumi Backend"
+    }
 
 @app.post("/lumi/chat")
 def lumi_chat(request: ChatRequest):
