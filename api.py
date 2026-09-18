@@ -34,6 +34,15 @@ from langchain_google_genai.chat_models import GoogleRateLimitError
 
 app = FastAPI()
 
+# =====================================================
+# 暫存每個使用者最後一次 Meditation Recommendation
+# 測試用，之後會改 Firestore
+# =====================================================
+
+latest_meditation_recommendations = {}
+
+TEST_FIREBASE_UID = "gQnT242fRCW4ImFwaJgJYDVRV9N2"
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -317,6 +326,19 @@ def lumi_chat(request: ChatRequest):
 
         print("Meditation Recommendation:")
         print(recommendation)
+
+        # =====================================================
+        # 暫時綁定測試 Firebase UID
+        # =====================================================
+
+        latest_meditation_recommendations[
+            TEST_FIREBASE_UID
+        ] = recommendation
+
+        print(
+            "Recommendation 已暫存給使用者：",
+            TEST_FIREBASE_UID)
+
 
 
         finished_context = (
@@ -743,4 +765,27 @@ def lumi_chat(request: ChatRequest):
         "options": [],
         "action": None,
         "context": current_context.model_dump()
+    }
+
+@app.get("/lumi/recommendation/{user_id}")
+def get_meditation_recommendation(
+    user_id: str
+):
+    recommendation = (
+        latest_meditation_recommendations.get(
+            user_id
+        )
+    )
+
+    if recommendation is None:
+        return {
+            "status": "not_found",
+            "userId": user_id,
+            "recommendation": None
+        }
+
+    return {
+        "status": "success",
+        "userId": user_id,
+        "recommendation": recommendation
     }
