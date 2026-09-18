@@ -1,103 +1,46 @@
-import os
-from pathlib import Path
-import shutil
-
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_chroma import Chroma
-
+"""Run from the project directory: python -m rag.build_index [--dry-run]."""
+import argparse
+from datetime import datetime, timezone
+import json
+import uuid
 from dotenv import load_dotenv
+from rag.corpus_loader import load_corpus, chunk_documents
+from rag.index_config import BASE_DIR, SETTINGS_PATH, EMBEDDING_MODEL, COLLECTION_NAME
 
-load_dotenv()
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run', action='store_true', help='Validate and chunk without an API call')
+    args = parser.parse_args()
+    documents = load_corpus(BASE_DIR / 'knowledge' / 'lumi_rag' / 'corpus.jsonl')
+    chunks = chunk_documents(documents)
+    print(f'Loaded {len(documents)} records; prepared {len(chunks)} chunks')
+    if args.dry_run:
+        print('Validation complete. No embedding API call or database change.')
+        return
+    load_dotenv(BASE_DIR / '.env')
+    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+    from langchain_chroma import Chroma
+    # Build separately. Never delete the active or original database.
+    name = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '_' + uuid.uuid4().hex[:8]
+    directory = BASE_DIR / 'rag_indexes' / name
+    directory.mkdir(parents=True, exist_ok=False)
+    embeddings = GoogleGenerativeAIEmbeddings(model=EMBEDDING_MODEL)
+    store = Chroma(collection_name=COLLECTION_NAME, embedding_function=embeddings,
+                   persist_directory=str(directory))
+    ids = [doc.metadata['chunk_id'] for doc in chunks]
+    for start in range(0, len(chunks), 32):
+        store.add_documents(chunks[start:start+32], ids=ids[start:start+32])
+    stored = store.get(ids=ids, include=['metadatas'])
+    if set(stored['ids']) != set(ids):
+        raise RuntimeError('Incomplete index; active settings have not changed')
+    # Switch only after all records are persisted. Restart backend after success.
+    settings = {'directory': directory.relative_to(BASE_DIR).as_posix(),
+                'embedding_model': EMBEDDING_MODEL, 'collection_name': COLLECTION_NAME,
+                'record_count': len(documents), 'chunk_count': len(chunks)}
+    temporary = SETTINGS_PATH.with_suffix('.json.tmp')
+    temporary.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding='utf-8')
+    temporary.replace(SETTINGS_PATH)
+    print('New index activated. Restart the backend to load it. Original chroma_db retained.')
 
-# =====================================================
-# 路徑設定
-# =====================================================
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-KNOWLEDGE_DIR = BASE_DIR / "knowledge"
-CHROMA_DIR = BASE_DIR / "chroma_db"
-
-
-# =====================================================
-# 1. 讀取 knowledge 裡面的 Markdown
-# =====================================================
-
-documents = []
-
-for file_path in KNOWLEDGE_DIR.rglob("*.md"):
-
-    print(f"讀取語料：{file_path}")
-
-    text = file_path.read_text(
-        encoding="utf-8"
-    )
-
-    document = Document(
-        page_content=text,
-        metadata={
-            "source": str(file_path.relative_to(KNOWLEDGE_DIR)),
-            "filename": file_path.name
-        }
-    )
-
-    documents.append(document)
-
-
-print(f"\n共讀取 {len(documents)} 份文件")
-
-
-# =====================================================
-# 2. Chunk
-# =====================================================
-
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,
-    chunk_overlap=80
-)
-
-chunks = text_splitter.split_documents(documents)
-
-print(f"切成 {len(chunks)} 個 chunks")
-
-
-# =====================================================
-# 3. Gemini Embedding
-# =====================================================
-
-embeddings = GoogleGenerativeAIEmbeddings(
-    model="models/gemini-embedding-001"
-)
-
-# =====================================================
-# 4. 清除舊的 Chroma DB
-# 避免重新 build 時產生重複資料
-# =====================================================
-
-if CHROMA_DIR.exists():
-    print("\n清除舊的 Chroma DB...")
-    shutil.rmtree(CHROMA_DIR)
-
-# =====================================================
-# 5. 建立新的 Chroma DB
-# =====================================================
-
-vectorstore = Chroma.from_documents(
-    documents=chunks,
-    embedding=embeddings,
-    collection_name="lumi_knowledge",
-    persist_directory=str(CHROMA_DIR)
-)
-
-
-print("\n==============================")
-print("Lumi RAG 建立完成")
-print("==============================")
-
-for i, chunk in enumerate(chunks):
-
-    print(f"\nChunk {i + 1}")
-    print("Source:", chunk.metadata["source"])
-    print(chunk.page_content[:200])
+if __name__ == '__main__':
+    main()
