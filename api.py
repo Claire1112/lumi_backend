@@ -39,30 +39,34 @@ app = FastAPI()
 # 測試用，之後會改 Firestore
 # =====================================================
 
-latest_meditation_recommendations = {}
-
-TEST_FIREBASE_UID = "gQnT242fRCW4ImFwaJgJYDVRV9N2"
-
-
 class ChatRequest(BaseModel):
     message: str
+    userId: str
+    conversationId: str
 
 
 # =====================================================
-# Context
+# 每個 Conversation 各自保存自己的多輪狀態
 # =====================================================
 
-# 冥想 Context
-current_context = CurrentContext()
+conversation_states = {}
 
-# 呼吸 Context
-breathing_context = BreathingContext()
 
-# 穴位 Context
-acupressure_context = AcupressureContext()
+def create_conversation_state(user_id: str):
+    return {
+        "userId": user_id,
 
-# 目前正在執行的多輪流程
-active_route = None
+        # 各功能自己的多輪 Context
+        "current_context": CurrentContext(),
+        "breathing_context": BreathingContext(),
+        "acupressure_context": AcupressureContext(),
+
+        # 目前正在執行的流程
+        "active_route": None,
+
+        # 這個 Conversation 最新一次完成的 Meditation Recommendation
+        "meditation_recommendation": None
+    }
 
 
 # =====================================================
@@ -132,10 +136,81 @@ def health_check():
 @app.post("/lumi/chat")
 def lumi_chat(request: ChatRequest):
 
-    global current_context
-    global breathing_context
-    global acupressure_context
-    global active_route
+    user_id = request.userId
+    conversation_id = request.conversationId
+
+    print("\n============================")
+    print("Firebase UID：", user_id)
+    print("Conversation ID：", conversation_id)
+    print("收到叡揚訊息：", repr(request.message))
+    print("============================\n")
+
+
+    # =====================================================
+    # 第一次收到這個 Conversation
+    # → 建立獨立的多輪狀態
+    # =====================================================
+
+    if conversation_id not in conversation_states:
+
+        conversation_states[
+            conversation_id
+        ] = create_conversation_state(
+            user_id
+        )
+
+        print(
+            "建立新的 Conversation State：",
+            conversation_id
+        )
+
+
+    state = conversation_states[
+        conversation_id
+    ]
+
+
+    # =====================================================
+    # Firebase UID 檢查
+    # 同一個 conversation 不應該突然換人
+    # =====================================================
+
+    if state["userId"] != user_id:
+
+        return {
+            "route": "system",
+            "status": "user_mismatch",
+            "missingField": None,
+            "reply": "聊天使用者資料不一致。",
+            "options": [],
+            "action": None,
+            "context": {}
+        }
+
+
+    # =====================================================
+    # 取得這個 Conversation 自己的 Context
+    # =====================================================
+
+    current_context = state[
+        "current_context"
+    ]
+
+    breathing_context = state[
+        "breathing_context"
+    ]
+
+    acupressure_context = state[
+        "acupressure_context"
+    ]
+
+    active_route = state[
+        "active_route"
+    ]
+
+
+    # 記住進來之前正在跑什麼流程
+    previous_active_route = active_route
 
     print("\n============================")
     print("收到叡揚訊息：", repr(request.message))
@@ -155,11 +230,19 @@ def lumi_chat(request: ChatRequest):
 
         print("Cancel Current Flow")
 
-        current_context = CurrentContext()
-        breathing_context = BreathingContext()
-        acupressure_context = AcupressureContext()
+        state["current_context"] = (
+            CurrentContext()
+        )
 
-        active_route = None
+        state["breathing_context"] = (
+            BreathingContext()
+        )
+
+        state["acupressure_context"] = (
+            AcupressureContext()
+        )
+
+        state["active_route"] = None
 
         return {
             "route": "system",
@@ -222,15 +305,30 @@ def lumi_chat(request: ChatRequest):
 
             # 清除原本尚未完成的流程資料
             if active_route == "meditation":
-                current_context = CurrentContext()
+
+                state["current_context"] = (
+                    CurrentContext()
+                )
 
             elif active_route == "breathing":
-                breathing_context = BreathingContext()
+
+                state["breathing_context"] = (
+                    BreathingContext()
+                )
 
             elif active_route == "acupressure":
-                acupressure_context = AcupressureContext()
+
+                state["acupressure_context"] = (
+                    AcupressureContext()
+                )
+
 
             active_route = explicit_switch_route
+
+            state["active_route"] = (
+                explicit_switch_route
+            )
+
             route = explicit_switch_route
 
 
@@ -257,7 +355,21 @@ def lumi_chat(request: ChatRequest):
 
     if route == "meditation":
 
+        # =====================================================
+        # 判斷是不是「新的一次」Meditation Flow
+        # =====================================================
+
+        if previous_active_route != "meditation":
+
+            # 開始新 Meditation Flow 時，
+            # 舊的 Recommendation 不應該再被當成這次結果
+            state["meditation_recommendation"] = None
+
+
         active_route = "meditation"
+
+        state["active_route"] = "meditation"
+
 
         try:
             new_context = extract_context(
@@ -265,6 +377,7 @@ def lumi_chat(request: ChatRequest):
             )
 
         except GoogleRateLimitError:
+
             return {
                 "route": "system",
                 "status": "error",
@@ -277,8 +390,14 @@ def lumi_chat(request: ChatRequest):
 
 
         print("New Context:")
-        print(new_context.model_dump())
+        print(
+            new_context.model_dump()
+        )
 
+
+        # =====================================================
+        # Merge 多輪資料
+        # =====================================================
 
         current_context = merge_context(
             current_context,
@@ -286,8 +405,17 @@ def lumi_chat(request: ChatRequest):
         )
 
 
+        # 非常重要：
+        # Merge 完要放回這個 Conversation
+        state["current_context"] = (
+            current_context
+        )
+
+
         print("Merged Context:")
-        print(current_context.model_dump())
+        print(
+            current_context.model_dump()
+        )
 
 
         missing_fields = get_missing_fields(
@@ -296,12 +424,15 @@ def lumi_chat(request: ChatRequest):
 
 
         print("Missing Fields:")
-        print(missing_fields)
+        print(
+            missing_fields
+        )
 
 
-        # -------------------------------------------------
+        # =====================================================
         # 還缺資料
-        # -------------------------------------------------
+        # → 保留 Context，下一輪繼續
+        # =====================================================
 
         if missing_fields:
 
@@ -311,45 +442,72 @@ def lumi_chat(request: ChatRequest):
 
             return {
                 **response,
-                "context": current_context.model_dump()
+                "context":
+                    current_context.model_dump()
             }
 
 
-        # -------------------------------------------------
-        # 資料完整 → 推薦冥想
-        # -------------------------------------------------
+        # =====================================================
+        # 資料完整 → Meditation Recommendation
+        # =====================================================
 
         recommendation = recommend_meditation(
             current_context
         )
 
 
-        print("Meditation Recommendation:")
-        print(recommendation)
-
-        # =====================================================
-        # 暫時綁定測試 Firebase UID
-        # =====================================================
-
-        latest_meditation_recommendations[
-            TEST_FIREBASE_UID
-        ] = recommendation
+        print(
+            "Meditation Recommendation:"
+        )
 
         print(
-            "Recommendation 已暫存給使用者：",
-            TEST_FIREBASE_UID)
+            recommendation
+        )
 
+
+        # =====================================================
+        # 保存這個 Conversation 最新一次 Meditation Recommendation
+        # =====================================================
+
+        state[
+            "meditation_recommendation"
+        ] = recommendation
+
+
+        print(
+            "Meditation Recommendation 已保存"
+        )
+
+        print(
+            "Firebase UID：",
+            user_id
+        )
+
+        print(
+            "Conversation ID：",
+            conversation_id
+        )
 
 
         finished_context = (
             current_context.model_dump()
         )
 
-        # 結束流程
-        active_route = None
 
-        # Reset
-        current_context = CurrentContext()
+        # =====================================================
+        # Meditation Flow 完成
+        #
+        # active_route Reset
+        # Context Reset
+        #
+        # 但是 recommendation 保留給 GET
+        # =====================================================
+
+        state["active_route"] = None
+
+        state["current_context"] = (
+            CurrentContext()
+        )
 
 
         return {
@@ -373,6 +531,10 @@ def lumi_chat(request: ChatRequest):
     if route == "breathing":
 
         active_route = "breathing"
+
+        state["active_route"] = (
+            "breathing"
+        )
 
         try:
             new_breathing_context = (
@@ -402,6 +564,10 @@ def lumi_chat(request: ChatRequest):
         breathing_context = merge_breathing_context(
             breathing_context,
             new_breathing_context
+        )
+
+        state["breathing_context"] = (
+            breathing_context
         )
 
 
@@ -461,10 +627,11 @@ def lumi_chat(request: ChatRequest):
 
 
         # 結束流程
-        active_route = None
+        state["active_route"] = None
 
-        # Reset
-        breathing_context = BreathingContext()
+        state["breathing_context"] = (
+            BreathingContext()
+        )
 
 
         return {
@@ -491,6 +658,10 @@ def lumi_chat(request: ChatRequest):
     if route == "acupressure":
 
         active_route = "acupressure"
+
+        state["active_route"] = (
+            "acupressure"
+        )
 
         try:
             new_acupressure_context = (
@@ -520,6 +691,10 @@ def lumi_chat(request: ChatRequest):
         acupressure_context = merge_acupressure_context(
             acupressure_context,
             new_acupressure_context
+        )
+
+        state["acupressure_context"] = (
+            acupressure_context
         )
 
 
@@ -580,9 +755,9 @@ def lumi_chat(request: ChatRequest):
                 acupressure_context.model_dump()
             )
 
-            active_route = None
+            state["active_route"] = None
 
-            acupressure_context = (
+            state["acupressure_context"] = (
                 AcupressureContext()
             )
 
@@ -603,10 +778,10 @@ def lumi_chat(request: ChatRequest):
 
 
         # 結束流程
-        active_route = None
+        state["active_route"] = None
 
         # Reset
-        acupressure_context = (
+        state["acupressure_context"] = (
             AcupressureContext()
         )
 
@@ -631,7 +806,7 @@ def lumi_chat(request: ChatRequest):
 
     if route == "app_help":
 
-        active_route = None
+        state["active_route"] = None
 
         return {
             "route": "app_help",
@@ -767,25 +942,70 @@ def lumi_chat(request: ChatRequest):
         "context": current_context.model_dump()
     }
 
-@app.get("/lumi/recommendation/{user_id}")
-def get_meditation_recommendation(
-    user_id: str
+@app.get(
+    "/lumi/recommendation/{user_id}/{conversation_id}"
+)
+def get_recommendation(
+    user_id: str,
+    conversation_id: str
 ):
-    recommendation = (
-        latest_meditation_recommendations.get(
-            user_id
-        )
+
+    state = conversation_states.get(
+        conversation_id
     )
 
-    if recommendation is None:
+
+    # =====================================================
+    # Conversation 不存在
+    # =====================================================
+
+    if state is None:
+
         return {
             "status": "not_found",
             "userId": user_id,
+            "conversationId": conversation_id,
             "recommendation": None
         }
+
+
+    # =====================================================
+    # Firebase UID 不符合
+    # =====================================================
+
+    if state["userId"] != user_id:
+
+        return {
+            "status": "user_mismatch",
+            "userId": user_id,
+            "conversationId": conversation_id,
+            "recommendation": None
+        }
+
+
+    # =====================================================
+    # 取得最新 Meditation Recommendation
+    # =====================================================
+
+    recommendation = state.get(
+        "meditation_recommendation"
+    )
+
+
+    # Meditation Flow 還沒完成
+    if recommendation is None:
+
+        return {
+            "status": "not_ready",
+            "userId": user_id,
+            "conversationId": conversation_id,
+            "recommendation": None
+        }
+
 
     return {
         "status": "success",
         "userId": user_id,
+        "conversationId": conversation_id,
         "recommendation": recommendation
     }
