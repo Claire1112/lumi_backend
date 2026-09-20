@@ -35,6 +35,8 @@ from acupressure_recommender import recommend_acupressure
 from langchain_google_genai.chat_models import GoogleRateLimitError
 
 
+from firebase_client import save_conversation
+
 app = FastAPI()
 
 @app.exception_handler(RequestValidationError)
@@ -67,7 +69,39 @@ class ChatRequest(BaseModel):
     caiConversationId: str | None = None
     message: str | None = None
 
+@app.get("/firebase/test")
+def firebase_test():
 
+    test_user_id = "test_user"
+
+    test_conversation_id = "test_conversation"
+
+    test_data = {
+        "userId": test_user_id,
+        "conversationId": test_conversation_id,
+        "sessionId": None,
+        "activeRoute": None,
+        "status": "test",
+
+        "meditationContext": {},
+        "breathingContext": {},
+        "acupressureContext": {},
+
+        "recommendationInput": None
+    }
+
+    save_conversation(
+        user_id=test_user_id,
+        conversation_id=test_conversation_id,
+        conversation_data=test_data
+    )
+
+    return {
+        "status": "ok",
+        "message": "Firestore test success"
+    }
+
+    
 # =====================================================
 # Context
 # =====================================================

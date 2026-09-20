@@ -29,3 +29,5 @@ langchain-google-genai
 langchain-chroma
 langchain-text-splitters
 chromadb
+
+firebase-admin
