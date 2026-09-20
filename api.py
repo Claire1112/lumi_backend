@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
 from rag.rag_service import answer_with_rag
 
 from extractor import extract_context, get_missing_fields, CurrentContext
@@ -34,12 +37,35 @@ from langchain_google_genai.chat_models import GoogleRateLimitError
 
 app = FastAPI()
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError
+):
+    body = await request.body()
+
+    print("\n")
+    print("========== FASTAPI 422 DEBUG ==========")
+    print("URL:", request.url)
+    print("Content-Type:", request.headers.get("content-type"))
+    print("Raw Body:", body.decode("utf-8", errors="replace"))
+    print("Validation Errors:", exc.errors())
+    print("=======================================")
+    print("\n")
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": exc.errors()
+        }
+    )
+
 
 class ChatRequest(BaseModel):
     userId: str | None = None
     conversationId: str | None = None
     caiConversationId: str | None = None
-    message: str
+    message: str | None = None
 
 
 # =====================================================
@@ -58,6 +84,49 @@ acupressure_context = AcupressureContext()
 # 目前正在執行的多輪流程
 active_route = None
 
+# =====================================================
+# 給 Firebase / 組員使用的 Conversation Data
+# =====================================================
+
+def build_conversation_data(
+    user_id,
+    conversation_id,
+    active_route,
+    status,
+    meditation_context=None,
+    breathing_context=None,
+    acupressure_context=None,
+    recommendation_input=None,
+    session_id=None
+):
+    return {
+        "userId": user_id,
+        "conversationId": conversation_id,
+        "sessionId": session_id,
+
+        "activeRoute": active_route,
+        "status": status,
+
+        "meditationContext": (
+            meditation_context.model_dump()
+            if meditation_context is not None
+            else {}
+        ),
+
+        "breathingContext": (
+            breathing_context.model_dump()
+            if breathing_context is not None
+            else {}
+        ),
+
+        "acupressureContext": (
+            acupressure_context.model_dump()
+            if acupressure_context is not None
+            else {}
+        ),
+
+        "recommendationInput": recommendation_input
+    }
 
 # =====================================================
 # 明確切換功能判斷
@@ -137,7 +206,7 @@ def lumi_chat(request: ChatRequest):
 
     user_id = request.userId
     conversation_id = request.conversationId
-    message = request.message
+    message = request.message or ""
 
     print("\n============================")
     print("收到 Lumi Request")
@@ -321,11 +390,25 @@ def lumi_chat(request: ChatRequest):
                 missing_fields
             )
 
+            conversation_data = build_conversation_data(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                active_route="meditation",
+                status="collecting",
+                meditation_context=current_context,
+                breathing_context=breathing_context,
+                acupressure_context=acupressure_context
+            )
+
+            print("\n========== Conversation Data ==========")
+            print(conversation_data)
+            print("=======================================\n")
+
             return {
                 **response,
-                "context": current_context.model_dump()
+                "context": current_context.model_dump(),
+                "conversationData": conversation_data
             }
-
 
         # -------------------------------------------------
         # 資料完整 → 推薦冥想
@@ -344,6 +427,35 @@ def lumi_chat(request: ChatRequest):
             current_context.model_dump()
         )
 
+        # =====================================================
+        # 整理 Recommendation Input
+        # =====================================================
+
+        recommendation_input = {
+            "type": "meditation",
+            "context": finished_context,
+            "recommendation": recommendation
+        }
+
+        # =====================================================
+        # 整理給組員 / Firebase 的資料
+        # =====================================================
+
+        conversation_data = build_conversation_data(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            active_route=None,
+            status="ready",
+            meditation_context=current_context,
+            breathing_context=breathing_context,
+            acupressure_context=acupressure_context,
+            recommendation_input=recommendation_input
+        )
+
+        print("\n========== Conversation Data ==========")
+        print(conversation_data)
+        print("=======================================\n")
+
         # 結束流程
         active_route = None
 
@@ -361,7 +473,8 @@ def lumi_chat(request: ChatRequest):
                 "type": "start_meditation",
                 "data": recommendation
             },
-            "context": finished_context
+            "context": finished_context,
+            "conversationData": conversation_data
         }
 
 
