@@ -34,17 +34,11 @@ from langchain_google_genai.chat_models import GoogleRateLimitError
 
 app = FastAPI()
 
-# =====================================================
-# 暫存每個使用者最後一次 Meditation Recommendation
-# 測試用，之後會改 Firestore
-# =====================================================
-
-latest_meditation_recommendations = {}
-
-TEST_FIREBASE_UID = "gQnT242fRCW4ImFwaJgJYDVRV9N2"
-
 
 class ChatRequest(BaseModel):
+    userId: str | None = None
+    conversationId: str | None = None
+    caiConversationId: str | None = None
     message: str
 
 
@@ -137,15 +131,27 @@ def lumi_chat(request: ChatRequest):
     global acupressure_context
     global active_route
 
+    # =====================================================
+    # Request 基本資料
+    # =====================================================
+
+    user_id = request.userId
+    conversation_id = request.conversationId
+    message = request.message
+
     print("\n============================")
-    print("收到叡揚訊息：", repr(request.message))
+    print("收到 Lumi Request")
+    print("User ID:", user_id)
+    print("Conversation ID:", conversation_id)
+    print("C.ai Conversation ID:", request.caiConversationId)
+    print("Message:", repr(message))
     print("============================\n")
 
     # =====================================================
     # 1. Route 判斷
     # =====================================================
 
-    detected_route = detect_route(request.message)
+    detected_route = detect_route(message)
 
     # =====================================================
     # 使用者取消目前流程
@@ -202,6 +208,12 @@ def lumi_chat(request: ChatRequest):
     # -----------------------------------------------------
     # 已經在某個多輪流程
     # -----------------------------------------------------
+
+    elif detected_route == "knowledge":
+
+        # Answer an explanatory question without resetting the unfinished flow.
+        # The next slot response can resume the original recommendation.
+        route = "knowledge"
 
     else:
 
@@ -326,19 +338,6 @@ def lumi_chat(request: ChatRequest):
 
         print("Meditation Recommendation:")
         print(recommendation)
-
-        # =====================================================
-        # 暫時綁定測試 Firebase UID
-        # =====================================================
-
-        latest_meditation_recommendations[
-            TEST_FIREBASE_UID
-        ] = recommendation
-
-        print(
-            "Recommendation 已暫存給使用者：",
-            TEST_FIREBASE_UID)
-
 
 
         finished_context = (
@@ -765,27 +764,4 @@ def lumi_chat(request: ChatRequest):
         "options": [],
         "action": None,
         "context": current_context.model_dump()
-    }
-
-@app.get("/lumi/recommendation/{user_id}")
-def get_meditation_recommendation(
-    user_id: str
-):
-    recommendation = (
-        latest_meditation_recommendations.get(
-            user_id
-        )
-    )
-
-    if recommendation is None:
-        return {
-            "status": "not_found",
-            "userId": user_id,
-            "recommendation": None
-        }
-
-    return {
-        "status": "success",
-        "userId": user_id,
-        "recommendation": recommendation
     }

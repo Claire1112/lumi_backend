@@ -21,6 +21,14 @@ def detect_route(message: str) -> str:
     # =====================================================
 
     knowledge_patterns = [
+        # Privacy questions are explanations, not recommendation slots.
+        "我的資料",
+        "隱私",
+        "個資",
+        "資料保存",
+        "資料儲存",
+        "資料使用",
+        "資料安全",
         "什麼是",
         "是什麼",
         "什麼意思",
