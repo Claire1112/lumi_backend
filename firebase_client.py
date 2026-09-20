@@ -1,30 +1,27 @@
 import firebase_admin
-
-from firebase_admin import credentials
 from firebase_admin import firestore
 
 
-# =====================================================
+# =========================================================
 # Firebase 初始化
-# =====================================================
+# 與 recommendation-backend 使用相同方式
+# =========================================================
 
-if not firebase_admin._apps:
-
-    cred = credentials.Certificate(
-        "firebase-service-account.json"
-    )
-
+try:
+    firebase_admin.get_app()
+except ValueError:
     firebase_admin.initialize_app(
-        cred
+        options={
+            "projectId": "ming-advisor-ff390"
+        }
     )
-
 
 db = firestore.client()
 
 
-# =====================================================
+# =========================================================
 # Lumi Conversation
-# =====================================================
+# =========================================================
 
 def save_conversation(
     user_id: str,
@@ -41,15 +38,10 @@ def save_conversation(
     """
 
     if not user_id:
-        raise ValueError(
-            "user_id 不可為空"
-        )
+        raise ValueError("user_id 不可為空")
 
     if not conversation_id:
-        raise ValueError(
-            "conversation_id 不可為空"
-        )
-
+        raise ValueError("conversation_id 不可為空")
 
     conversation_ref = (
         db
@@ -59,6 +51,12 @@ def save_conversation(
         .document(conversation_id)
     )
 
+    # -------------------------------------------------
+    # 建立 Firestore 專用副本
+    # 不直接修改 FastAPI 原本的 conversation_data
+    # -------------------------------------------------
+
+    payload = dict(conversation_data)
 
     # -------------------------------------------------
     # 判斷是不是第一次建立
@@ -66,16 +64,13 @@ def save_conversation(
 
     snapshot = conversation_ref.get()
 
-
     if snapshot.exists:
 
         # 已存在 → 更新
-        conversation_data["updatedAt"] = (
-            firestore.SERVER_TIMESTAMP
-        )
+        payload["updatedAt"] = firestore.SERVER_TIMESTAMP
 
         conversation_ref.set(
-            conversation_data,
+            payload,
             merge=True
         )
 
@@ -85,21 +80,13 @@ def save_conversation(
             f"lumiConversations/{conversation_id}"
         )
 
-
     else:
 
         # 第一次 → 建立
-        conversation_data["createdAt"] = (
-            firestore.SERVER_TIMESTAMP
-        )
+        payload["createdAt"] = firestore.SERVER_TIMESTAMP
+        payload["updatedAt"] = firestore.SERVER_TIMESTAMP
 
-        conversation_data["updatedAt"] = (
-            firestore.SERVER_TIMESTAMP
-        )
-
-        conversation_ref.set(
-            conversation_data
-        )
+        conversation_ref.set(payload)
 
         print(
             "Firestore Conversation Created:",

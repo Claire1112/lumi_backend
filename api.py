@@ -162,6 +162,43 @@ def build_conversation_data(
         "recommendationInput": recommendation_input
     }
 
+def persist_conversation(request: ChatRequest, conversation_data: dict):
+    if not request.userId or not request.conversationId:
+        print("Skip Firestore save: missing userId or conversationId")
+        return
+
+    save_conversation(
+        user_id=request.userId,
+        conversation_id=request.conversationId,
+        conversation_data=conversation_data
+    )
+
+
+def save_lumi_conversation(
+    user_id: str | None,
+    conversation_id: str | None,
+    conversation_data: dict
+):
+    if not user_id or not conversation_id:
+        print("Skip Firestore save: missing userId or conversationId")
+        return
+
+    try:
+        save_conversation(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            conversation_data=conversation_data
+        )
+
+        print(
+            "Lumi conversation saved:",
+            f"users/{user_id}/lumiConversations/{conversation_id}"
+        )
+
+    except Exception as e:
+        print("Firestore save failed:", e)
+
+
 # =====================================================
 # 明確切換功能判斷
 # =====================================================
@@ -433,6 +470,11 @@ def lumi_chat(request: ChatRequest):
                 breathing_context=breathing_context,
                 acupressure_context=acupressure_context
             )
+            save_lumi_conversation(
+                user_id,
+                conversation_id,
+                conversation_data
+            )
 
             print("\n========== Conversation Data ==========")
             print(conversation_data)
@@ -484,6 +526,12 @@ def lumi_chat(request: ChatRequest):
             breathing_context=breathing_context,
             acupressure_context=acupressure_context,
             recommendation_input=recommendation_input
+        )
+
+        save_lumi_conversation(
+            user_id,
+            conversation_id,
+            conversation_data
         )
 
         print("\n========== Conversation Data ==========")
@@ -578,9 +626,36 @@ def lumi_chat(request: ChatRequest):
                 missing_fields
             )
 
+            # 整理目前 Conversation Data
+            conversation_data = build_conversation_data(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                active_route="breathing",
+                status="collecting",
+                meditation_context=current_context,
+                breathing_context=breathing_context,
+                acupressure_context=acupressure_context
+            )
+
+            # 儲存到 Firestore
+            save_lumi_conversation(
+                user_id,
+                conversation_id,
+                conversation_data
+            )
+            print("\n========== Breathing Response ==========")
+            print("Reply:", response.get("reply"))
+            print("Options:", response.get("options"))
+            print("========================================\n")
+
+            print("\n========== Conversation Data ==========")
+            print(conversation_data)
+            print("=======================================\n")
+
             return {
                 **response,
-                "context": breathing_context.model_dump()
+                "context": breathing_context.model_dump(),
+                "conversationData": conversation_data
             }
 
 
@@ -606,10 +681,62 @@ def lumi_chat(request: ChatRequest):
         )
 
 
+        # =====================================================
+        # 整理 Recommendation Input
+        # =====================================================
+
+        recommendation_input = {
+            "type": "breathing",
+            "context": finished_context,
+            "recommendation": {
+                "duration": finished_duration,
+                **recommendation
+            }
+        }
+
+
+        # =====================================================
+        # 整理給 Firebase / 組員的 Conversation Data
+        # =====================================================
+
+        conversation_data = build_conversation_data(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            active_route=None,
+            status="ready",
+            meditation_context=current_context,
+            breathing_context=breathing_context,
+            acupressure_context=acupressure_context,
+            recommendation_input=recommendation_input
+        )
+
+
+        # =====================================================
+        # 儲存到 Firestore
+        # =====================================================
+
+        save_lumi_conversation(
+            user_id,
+            conversation_id,
+            conversation_data
+        )
+
+
+        print("\n========== Conversation Data ==========")
+        print(conversation_data)
+        print("=======================================\n")
+
+
+        # =====================================================
         # 結束流程
+        # =====================================================
+
         active_route = None
 
+
         # Reset
+        # 注意：一定要在 Firestore 儲存完成之後才能 Reset
+
         breathing_context = BreathingContext()
 
 
@@ -626,7 +753,8 @@ def lumi_chat(request: ChatRequest):
                     **recommendation
                 }
             },
-            "context": finished_context
+            "context": finished_context,
+            "conversationData": conversation_data
         }
 
 
@@ -697,9 +825,37 @@ def lumi_chat(request: ChatRequest):
                 acupressure_context
             )
 
+            # 整理目前 Conversation Data
+            conversation_data = build_conversation_data(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                active_route="acupressure",
+                status="collecting",
+                meditation_context=current_context,
+                breathing_context=breathing_context,
+                acupressure_context=acupressure_context
+            )
+
+            # 儲存到 Firestore
+            save_lumi_conversation(
+                user_id,
+                conversation_id,
+                conversation_data
+            )
+
+            print("\n========== Acupressure Response ==========")
+            print("Reply:", response.get("reply"))
+            print("Options:", response.get("options"))
+            print("==========================================\n")
+
+            print("\n========== Conversation Data ==========")
+            print(conversation_data)
+            print("=======================================\n")
+
             return {
                 **response,
-                "context": acupressure_context.model_dump()
+                "context": acupressure_context.model_dump(),
+                "conversationData": conversation_data
             }
 
 
@@ -717,7 +873,7 @@ def lumi_chat(request: ChatRequest):
 
 
         # -------------------------------------------------
-        # 防呆
+        # 防呆：找不到推薦
         # -------------------------------------------------
 
         if recommendation is None:
@@ -726,11 +882,29 @@ def lumi_chat(request: ChatRequest):
                 acupressure_context.model_dump()
             )
 
-            active_route = None
-
-            acupressure_context = (
-                AcupressureContext()
+            conversation_data = build_conversation_data(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                active_route=None,
+                status="error",
+                meditation_context=current_context,
+                breathing_context=breathing_context,
+                acupressure_context=acupressure_context,
+                recommendation_input={
+                    "type": "acupressure",
+                    "context": finished_context,
+                    "recommendation": None
+                }
             )
+
+            save_lumi_conversation(
+                user_id,
+                conversation_id,
+                conversation_data
+            )
+
+            active_route = None
+            acupressure_context = AcupressureContext()
 
             return {
                 "route": "acupressure",
@@ -739,23 +913,66 @@ def lumi_chat(request: ChatRequest):
                 "reply": "目前找不到符合這個狀況的穴位推薦。",
                 "options": [],
                 "action": None,
-                "context": finished_context
+                "context": finished_context,
+                "conversationData": conversation_data
             }
 
+
+        # -------------------------------------------------
+        # 正常找到推薦
+        # -------------------------------------------------
 
         finished_context = (
             acupressure_context.model_dump()
         )
 
+        # =====================================================
+        # 整理 Recommendation Input
+        # =====================================================
 
-        # 結束流程
-        active_route = None
+        recommendation_input = {
+            "type": "acupressure",
+            "context": finished_context,
+            "recommendation": recommendation
+        }
 
-        # Reset
-        acupressure_context = (
-            AcupressureContext()
+        # =====================================================
+        # 整理給 Firebase / 組員的 Conversation Data
+        # =====================================================
+
+        conversation_data = build_conversation_data(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            active_route=None,
+            status="ready",
+            meditation_context=current_context,
+            breathing_context=breathing_context,
+            acupressure_context=acupressure_context,
+            recommendation_input=recommendation_input
         )
 
+        # =====================================================
+        # 儲存到 Firestore
+        # =====================================================
+
+        save_lumi_conversation(
+            user_id,
+            conversation_id,
+            conversation_data
+        )
+
+        print("\n========== Conversation Data ==========")
+        print(conversation_data)
+        print("=======================================\n")
+
+        # =====================================================
+        # 結束流程
+        # =====================================================
+
+        active_route = None
+
+        # Firestore 儲存完成後再 Reset
+        acupressure_context = AcupressureContext()
 
         return {
             "route": "acupressure",
@@ -767,7 +984,8 @@ def lumi_chat(request: ChatRequest):
                 "type": "start_acupressure",
                 "data": recommendation
             },
-            "context": finished_context
+            "context": finished_context,
+            "conversationData": conversation_data
         }
 
 
