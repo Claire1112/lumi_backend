@@ -1,20 +1,52 @@
+import os
+import json
 import firebase_admin
-from firebase_admin import firestore
+from firebase_admin import credentials, firestore
 
 
 # =========================================================
 # Firebase 初始化
-# 與 recommendation-backend 使用相同方式
+# 本機：使用 Application Default Credentials
+# Render：使用 FIREBASE_CREDENTIALS 環境變數
 # =========================================================
 
 try:
     firebase_admin.get_app()
+
 except ValueError:
-    firebase_admin.initialize_app(
-        options={
-            "projectId": "ming-advisor-ff390"
-        }
-    )
+
+    firebase_credentials = os.getenv("FIREBASE_CREDENTIALS")
+
+    if firebase_credentials:
+        # =================================================
+        # Render 環境
+        # =================================================
+        service_account_info = json.loads(firebase_credentials)
+
+        cred = credentials.Certificate(service_account_info)
+
+        firebase_admin.initialize_app(
+            cred,
+            options={
+                "projectId": "ming-advisor-ff390"
+            }
+        )
+
+        print("Firebase initialized using FIREBASE_CREDENTIALS")
+
+    else:
+        # =================================================
+        # 本機環境
+        # 使用 Application Default Credentials
+        # =================================================
+        firebase_admin.initialize_app(
+            options={
+                "projectId": "ming-advisor-ff390"
+            }
+        )
+
+        print("Firebase initialized using Application Default Credentials")
+
 
 db = firestore.client()
 
