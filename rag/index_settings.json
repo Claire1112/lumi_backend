@@ -1,5 +1,5 @@
 {
-  "directory": "rag_indexes/20260917T111108Z_da04ff9d",
+  "directory": "rag_indexes/20260921T090223Z_dc977786",
   "embedding_model": "models/gemini-embedding-001",
   "collection_name": "lumi_knowledge",
   "record_count": 83,

@@ -1,3 +1,4 @@
+from conversation_memory import extraction_input
 from typing import Optional, Literal, List
 from pydantic import BaseModel, Field
 
@@ -63,7 +64,7 @@ def extract_breathing_context(message: str) -> BreathingExtraction:
 請從使用者訊息中，只抽取使用者明確表達的資訊。
 
 使用者訊息：
-{message}
+{extraction_input(message)}
 
 欄位規則：
 

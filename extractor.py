@@ -1,3 +1,4 @@
+from conversation_memory import extraction_input
 from typing import Optional, Literal
 from pydantic import BaseModel, Field
 from llm import get_llm
@@ -124,7 +125,7 @@ explicitFields：
 不要自行猜測使用者偏好。
 
 使用者訊息：
-{message}
+{extraction_input(message)}
 """
 
     return structured_llm.invoke(prompt)

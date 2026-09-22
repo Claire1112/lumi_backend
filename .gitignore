@@ -24,3 +24,6 @@ firebase-service-account.json
 __pycache__/
 venv/
 .venv/
+conversation_sessions/
+
+conversation_backups/

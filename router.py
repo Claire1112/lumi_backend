@@ -1,3 +1,5 @@
+import re
+
 def detect_route(message: str) -> str:
     text = message.strip().lower()
 
@@ -16,6 +18,35 @@ def detect_route(message: str) -> str:
     if any(keyword in text for keyword in cancel_keywords):
         return "cancel"
 
+
+        # 單純問候：不要被尚未完成的推薦流程攔住
+    normalized = re.sub(r"[\s，。！？,.!?～~]", "", text)
+
+    if normalized in {
+        "你好", "您好", "嗨", "哈囉", "哈啰",
+        "hi", "hello", "謝謝", "謝謝你", "感謝"
+    }:
+        return "social"
+
+    # 適用性追問，例如「那它適合睡前嗎？」
+    suitability_question = re.search(
+        r"(適合|可以|能不能|可不可以).*(嗎|呢|[？?])$",
+        text
+    )
+
+    # 延續上一個主題，例如「那它怎麼做？」
+    reference_question = (
+        any(word in text for word in (
+            "那它", "這個", "那個", "剛剛", "這種", "那種"
+        ))
+        and any(word in text for word in (
+            "怎麼", "如何", "多久", "什麼", "嗎", "呢", "？", "?"
+        ))
+    )
+
+    if suitability_question or reference_question:
+        return "knowledge"
+        
     # =====================================================
     # 2. 知識 / 說明型問題
     # =====================================================
