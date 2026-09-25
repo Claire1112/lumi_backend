@@ -11,7 +11,7 @@ from rag.rag_service import answer_with_rag
 from extractor import extract_context, get_missing_fields, CurrentContext
 from response_builder import build_response
 from context_manager import merge_context
-from router import detect_route
+from router import detect_route, wants_personal_data, wants_breathing_settings, wants_acupressure_entry
 
 from breathing_context import (
     BreathingContext,
@@ -306,6 +306,41 @@ def _lumi_chat_turn(request: ChatRequest, session):
         # =====================================================
 
         detected_route = detect_route(message)
+
+        if detected_route != "cancel" and wants_acupressure_entry(message):
+            return {
+                "route": "navigation",
+                "status": "answered",
+                "missingField": None,
+                "reply": "點下方按鈕，就能前往穴道按摩頁。",
+                "options": ["lumi:navigate:acupressure"],
+                "action": None,
+                "context": {}
+            }
+
+        if detected_route != "cancel" and wants_breathing_settings(message):
+            return {
+                "route": "navigation",
+                "status": "answered",
+                "missingField": None,
+                "reply": "點下方按鈕開啟呼吸進階設定，就能調整吸氣、停留與吐氣秒數。",
+                "options": ["lumi:navigate:breathing_settings"],
+                "action": None,
+                "context": {}
+            }
+
+        # Offer a local navigation button without consuming recommendation slots.
+        if detected_route != "cancel" and wants_personal_data(message):
+            return {
+                "route": "navigation",
+                "status": "answered",
+                "missingField": None,
+                "reply": "可以，點下方按鈕查看你的個人數據與練習紀錄。",
+                "options": ["lumi:navigate:personal_records"],
+                "action": None,
+                "context": {}
+            }
+
 
         # =====================================================
         # 使用者取消目前流程

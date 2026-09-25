@@ -190,3 +190,36 @@ def detect_route(message: str) -> str:
     # =====================================================
 
     return "general_chat"
+
+def wants_personal_data(message: str) -> bool:
+    text = re.sub(r"[\s，。！？,.!?～~]", "", message.lower())
+    if any(word in text for word in ("不要", "不想", "不用", "取消", "刪除", "隱私", "安全", "保存", "儲存", "什麼是", "是什麼", "別人", "他人")):
+        return False
+    targets = ("個人數據", "個人資料頁", "個人紀錄", "我的數據", "我的紀錄", "練習紀錄", "個人記錄", "我的記錄", "練習記錄")
+    return any(word in text for word in targets) and (
+        text in targets or any(word in text for word in ("看", "查", "打開", "開啟", "前往", "帶我", "哪裡", "在哪", "進入"))
+    )
+
+
+def wants_breathing_settings(message: str) -> bool:
+    text = re.sub(r"[\s，。！？,.!?～~]", "", message.lower())
+    if any(word in text for word in ("不要", "不想", "不用", "取消", "什麼是", "是什麼", "原理", "安全嗎", "適合嗎", "為什麼")):
+        return False
+    if text in ("呼吸法進階設定", "呼吸進階設定", "呼吸設定", "呼吸滑桿", "呼吸滑杆"):
+        return True
+    subject = any(word in text for word in ("呼吸", "吸氣", "吐氣", "憋氣"))
+    setting = any(word in text for word in ("設定", "滑桿", "滑杆", "秒數", "進階", "自訂", "調整"))
+    request = any(word in text for word in ("打開", "開啟", "帶我", "前往", "在哪", "哪裡", "怎麼調", "如何調", "想調", "要調", "想改", "要改", "設定"))
+    return subject and setting and request
+
+
+def wants_acupressure_entry(message: str) -> bool:
+    text = re.sub(r"[\s，。！？,.!?～~]", "", message.lower())
+    if any(word in text for word in ("不要", "不想", "不用", "取消", "推薦", "什麼是", "是什麼", "原理", "功效", "好處", "適合", "安全", "怎麼按", "如何按", "怎麼做", "如何做")):
+        return False
+    targets = ("穴道按摩", "穴位按摩", "穴位放鬆", "穴道放鬆", "按摩區", "穴位教學", "穴道教學")
+    if not any(word in text for word in targets):
+        return False
+    return text in targets or any(word in text for word in (
+        "入口", "在哪", "哪裡", "哪邊", "打開", "開啟", "前往", "帶我", "進入", "想去", "要去", "怎麼去"
+    ))
