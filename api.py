@@ -11,7 +11,7 @@ from rag.rag_service import answer_with_rag
 from extractor import extract_context, get_missing_fields, CurrentContext
 from response_builder import build_response
 from context_manager import merge_context
-from router import detect_route, wants_personal_data, wants_breathing_settings, wants_acupressure_entry
+from router import wants_music_generation, detect_route, wants_personal_data, wants_breathing_settings, wants_acupressure_entry
 
 from breathing_context import (
     BreathingContext,
@@ -307,6 +307,14 @@ def _lumi_chat_turn(request: ChatRequest, session):
 
         detected_route = detect_route(message)
 
+        if detected_route != "cancel" and wants_music_generation(message):
+            return {
+                "route": "navigation", "status": "answered", "missingField": None,
+                "reply": "可以，點下方按鈕，選擇喜歡的感覺與風格，製作自己的音樂。",
+                "options": ["lumi:navigate:music_generation"],
+                "action": None, "context": {}
+            }
+
         if detected_route != "cancel" and wants_acupressure_entry(message):
             return {
                 "route": "navigation",
@@ -599,7 +607,7 @@ def _lumi_chat_turn(request: ChatRequest, session):
                 "status": "ready",
                 "missingField": None,
                 "reply": "好，我已經幫你準備好適合現在狀態的冥想。",
-                "options": [],
+                "options": ["lumi:navigate:meditation"],
                 "action": {
                     "type": "start_meditation",
                     "data": recommendation
@@ -793,8 +801,8 @@ def _lumi_chat_turn(request: ChatRequest, session):
                 "route": "breathing",
                 "status": "ready",
                 "missingField": None,
-                "reply": "好，我已經幫你選好適合的呼吸練習。",
-                "options": [],
+                "reply": "好，我已經幫你選好呼吸練習。點下方按鈕前往呼吸頁面。",
+                "options": ["lumi:navigate:breathing_practice"],
                 "action": {
                     "type": "start_breathing",
                     "data": {

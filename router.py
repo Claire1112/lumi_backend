@@ -223,3 +223,12 @@ def wants_acupressure_entry(message: str) -> bool:
     return text in targets or any(word in text for word in (
         "入口", "在哪", "哪裡", "哪邊", "打開", "開啟", "前往", "帶我", "進入", "想去", "要去", "怎麼去"
     ))
+
+
+def wants_music_generation(message: str) -> bool:
+    text = re.sub(r"[\s，。！？,.!?～~]", "", message.lower())
+    if any(word in text for word in ("不要", "不想", "不用", "取消", "什麼是", "是什麼", "原理", "版權", "費用")):
+        return False
+    if not any(word in text for word in ("音樂", "歌曲", "配樂")):
+        return False
+    return any(word in text for word in ("製作", "生成", "創作", "自製", "自訂", "做自己的", "做一首", "做音樂", "做歌曲", "做配樂"))
