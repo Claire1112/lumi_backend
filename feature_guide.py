@@ -36,17 +36,20 @@ FEATURES = {
 }
 
 
-def guide_topic(message):
+def guide_topic(message, allow_other=False):
     text = re.sub(r"[\s，。！？,.!?～~]", "", (message or "").lower())
     selections = {'冥想要從哪裡開始': 'meditation', '呼吸練習在哪裡': 'breathing', '穴位按摩在哪裡': 'acupressure', '要去哪裡製作自己的音樂': 'music', '我的練習紀錄在哪裡看': 'records', '我想看看其他功能': 'menu'}
     if text in selections:
         return selections[text]
+    if allow_other and text == "其他":
+        return "menu"
     if text.startswith(GUIDE_PREFIX):
         key = text[len(GUIDE_PREFIX):]
         return key if key == "menu" or key in FEATURES else None
     if any(word in text for word in ("取消", "不要", "不想", "不用")):
         return None
-    if text in ("功能導覽", "返回功能導覽", "app怎麼用", "app怎麼使用", "如何使用app",
+    if text in ("功能", "我想看功能導覽", "我想看看功能導覽", "我想了解功能導覽", "有哪些功能",
+                "功能導覽", "返回功能導覽", "app怎麼用", "app怎麼使用", "如何使用app",
                 "功能介紹", "使用方法", "怎麼使用", "如何使用", "功能在哪裡", "功能在哪"):
         return "menu"
     # Explicit guide selections and location/help requests, not health questions.
@@ -59,8 +62,8 @@ def guide_topic(message):
     return None
 
 
-def get_feature_guide(message):
-    topic = guide_topic(message)
+def get_feature_guide(message, allow_other=False):
+    topic = guide_topic(message, allow_other=allow_other)
     if topic is None:
         return None
     if topic == "menu":

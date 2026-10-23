@@ -309,7 +309,7 @@ def _lumi_chat_turn(request: ChatRequest, session):
 
         detected_route = detect_route(message)
 
-        guide_response = get_feature_guide(message)
+        guide_response = get_feature_guide(message, allow_other=active_route is None)
         if detected_route != "cancel" and guide_response is not None:
             # Read-only interruption: preserve contexts, active route and pending question.
             return guide_response
@@ -392,7 +392,7 @@ def _lumi_chat_turn(request: ChatRequest, session):
                 "options": [
                     "幫我推薦",
                     "我想放鬆",
-                    "我想睡覺",
+                    "功能導覽",
                     "呼吸練習",
                     "穴位放鬆"
                 ],
