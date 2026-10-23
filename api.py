@@ -11,7 +11,7 @@ from rag.rag_service import answer_with_rag
 from extractor import extract_context, get_missing_fields, CurrentContext
 from response_builder import build_response
 from context_manager import merge_context
-from router import wants_music_generation, detect_route, wants_personal_data, wants_breathing_settings, wants_acupressure_entry
+from router import wants_breathing_practice, wants_music_generation, detect_route, wants_personal_data, wants_breathing_settings, wants_acupressure_entry
 
 from breathing_context import (
     BreathingContext,
@@ -34,6 +34,7 @@ from acupressure_extractor import extract_acupressure_context
 from acupressure_context_manager import merge_acupressure_context
 from acupressure_response_builder import build_acupressure_response
 from acupressure_recommender import recommend_acupressure
+from acupressure_navigation import build_acupressure_options
 
 from langchain_google_genai.chat_models import GoogleRateLimitError
 
@@ -324,6 +325,19 @@ def _lumi_chat_turn(request: ChatRequest, session):
                 "options": ["lumi:navigate:acupressure"],
                 "action": None,
                 "context": {}
+            }
+
+        if detected_route != "cancel" and wants_breathing_practice(message):
+            # A page entry is not a recommendation or a completed exercise.
+            # Release an unfinished breathing questionnaire; preserve other flows.
+            if active_route == "breathing":
+                active_route = None
+                breathing_context = BreathingContext()
+            return {
+                "route": "navigation", "status": "answered", "missingField": None,
+                "reply": "可以，點下方「前往呼吸練習」開始。",
+                "options": ["lumi:navigate:breathing_practice"],
+                "action": None, "context": {}
             }
 
         if detected_route != "cancel" and wants_breathing_settings(message):
@@ -1035,8 +1049,8 @@ def _lumi_chat_turn(request: ChatRequest, session):
                 "route": "acupressure",
                 "status": "ready",
                 "missingField": None,
-                "reply": "好，我已經幫你找到適合目前狀況的穴位。",
-                "options": [],
+                "reply": "好，我已經幫你找到適合目前狀況的穴位，請選擇下方按鈕。",
+                "options": build_acupressure_options(recommendation),
                 "action": {
                     "type": "start_acupressure",
                     "data": recommendation

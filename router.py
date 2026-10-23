@@ -232,3 +232,22 @@ def wants_music_generation(message: str) -> bool:
     if not any(word in text for word in ("音樂", "歌曲", "配樂")):
         return False
     return any(word in text for word in ("製作", "生成", "創作", "自製", "自訂", "做自己的", "做一首", "做音樂", "做歌曲", "做配樂"))
+
+
+def wants_breathing_practice(message: str) -> bool:
+    """Recognize a practice entry request without intercepting explanations."""
+    text = re.sub(r"[\s，。！？,.!?～~]", "", message.lower())
+    if text == "lumi:navigate:breathing_practice":
+        return True
+    if any(word in text for word in (
+        "不要", "不想", "不用", "取消", "什麼", "原理", "功效", "好處",
+        "適合", "安全", "為什麼", "怎麼做", "如何做", "怎麼練", "如何練",
+        "多久", "推薦", "設定", "滑桿", "滑杆", "秒數", "進階", "自訂", "調整"
+    )):
+        return False
+    targets = ("呼吸練習", "呼吸訓練", "練習呼吸", "breathing")
+    if text in targets:
+        return True
+    return any(word in text for word in targets) and any(word in text for word in (
+        "想", "要", "開始", "前往", "帶我", "進入", "打開", "開啟", "在哪", "哪裡", "哪邊"
+    ))
