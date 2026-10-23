@@ -1,3 +1,4 @@
+from feature_guide import get_feature_guide
 from conversation_memory import conversation, use_memory, remember, ConversationBusy
 from fastapi import HTTPException
 
@@ -307,6 +308,11 @@ def _lumi_chat_turn(request: ChatRequest, session):
         # =====================================================
 
         detected_route = detect_route(message)
+
+        guide_response = get_feature_guide(message)
+        if detected_route != "cancel" and guide_response is not None:
+            # Read-only interruption: preserve contexts, active route and pending question.
+            return guide_response
 
         if detected_route != "cancel" and wants_music_generation(message):
             return {
@@ -1065,25 +1071,7 @@ def _lumi_chat_turn(request: ChatRequest, session):
         # =====================================================
 
         if route == "app_help":
-
-            active_route = None
-
-            return {
-                "route": "app_help",
-                "status": "answered",
-                "missingField": None,
-                "reply": (
-                    "你可以透過 Lumi 進行冥想推薦、"
-                    "呼吸練習和穴位按摩，"
-                    "也可以直接跟我說你現在的狀態。"
-                ),
-                "options": [],
-                "action": None,
-                "context": current_context.model_dump()
-            }
-        # =====================================================
-        # 6. Knowledge / RAG
-        # =====================================================
+            return get_feature_guide("功能導覽")
 
         if route == "knowledge":
 

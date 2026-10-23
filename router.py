@@ -1,3 +1,4 @@
+from feature_guide import guide_topic
 import re
 
 def detect_route(message: str) -> str:
@@ -17,6 +18,9 @@ def detect_route(message: str) -> str:
 
     if any(keyword in text for keyword in cancel_keywords):
         return "cancel"
+
+    if guide_topic(message) is not None:
+        return "app_help"
 
 
         # 單純問候：不要被尚未完成的推薦流程攔住
